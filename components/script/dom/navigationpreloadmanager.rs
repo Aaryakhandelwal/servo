@@ -52,7 +52,7 @@ impl NavigationPreloadManagerMethods for NavigationPreloadManager {
         if self.serviceworker_registration.is_active() {
             promise.reject_native(&DOMException::new(
                 &self.global(),
-                DOMErrorName::InvalidStateError,
+                DOMErrorName::InvalidState,
             ));
         } else {
             // 3.
@@ -74,7 +74,7 @@ impl NavigationPreloadManagerMethods for NavigationPreloadManager {
         if self.serviceworker_registration.is_active() {
             promise.reject_native(&DOMException::new(
                 &self.global(),
-                DOMErrorName::InvalidStateError,
+                DOMErrorName::InvalidState,
             ));
         } else {
             // 3.
@@ -96,7 +96,7 @@ impl NavigationPreloadManagerMethods for NavigationPreloadManager {
         if self.serviceworker_registration.is_active() {
             promise.reject_native(&DOMException::new(
                 &self.global(),
-                DOMErrorName::InvalidStateError,
+                DOMErrorName::InvalidState,
             ));
         } else {
             // 3.

@@ -196,7 +196,7 @@ impl HTMLButtonElement {
         // Step 3.1: disabled state check is in get_unclean_dataset
 
         // Step 3.1: only run steps if this is the submitter
-        if let Some(FormSubmitter::ButtonElement(submitter)) = submitter {
+        if let Some(FormSubmitter::Button(submitter)) = submitter {
             if submitter != self {
                 return None;
             }
@@ -351,7 +351,7 @@ impl Activatable for HTMLButtonElement {
                 if let Some(owner) = self.form_owner() {
                     owner.submit(
                         SubmittedFrom::NotFromForm,
-                        FormSubmitter::ButtonElement(self),
+                        FormSubmitter::Button(self),
                     );
                 }
             },

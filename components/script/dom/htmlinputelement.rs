@@ -1709,7 +1709,7 @@ impl HTMLInputElement {
         // Step 5.4
         let name = self.Name();
         let is_submitter = match submitter {
-            Some(FormSubmitter::InputElement(s)) => self == s,
+            Some(FormSubmitter::Input(s)) => self == s,
             _ => false,
         };
 
@@ -2127,7 +2127,7 @@ impl HTMLInputElement {
                     // lazily test for > 1 submission-blocking inputs
                     return;
                 }
-                form.submit(SubmittedFrom::NotFromForm, FormSubmitter::FormElement(form));
+                form.submit(SubmittedFrom::NotFromForm, FormSubmitter::Form(form));
             },
         }
     }
@@ -2835,7 +2835,7 @@ impl Activatable for HTMLInputElement {
                 self.form_owner().map(|o| {
                     o.submit(
                         SubmittedFrom::NotFromForm,
-                        FormSubmitter::InputElement(self),
+                        FormSubmitter::Input(self),
                     )
                 });
             },

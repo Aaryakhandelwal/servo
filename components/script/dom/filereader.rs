@@ -371,7 +371,7 @@ impl FileReaderMethods for FileReader {
         // Steps 1 & 3
         *self.result.borrow_mut() = None;
 
-        let exception = DOMException::new(&self.global(), DOMErrorName::AbortError);
+        let exception = DOMException::new(&self.global(), DOMErrorName::Abort);
         self.error.set(Some(&exception));
 
         self.terminate_ongoing_reading();

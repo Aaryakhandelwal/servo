@@ -528,7 +528,7 @@ impl BaseAudioContextMethods for BaseAudioContext {
                         let resolver = resolvers.remove(&uuid).unwrap();
                         if let Some(callback) = resolver.error_callback {
                             let _ = callback.Call__(
-                                &DOMException::new(&this.global(), DOMErrorName::DataCloneError),
+                                &DOMException::new(&this.global(), DOMErrorName::DataClone),
                                 ExceptionHandling::Report);
                         }
                         let error = format!("Audio decode error {:?}", error);
