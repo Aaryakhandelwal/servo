@@ -263,11 +263,11 @@ impl InProgressLoad {
 
 #[derive(Debug)]
 enum MixedMessage {
-    FromConstellation(ConstellationControlMsg),
-    FromScript(MainThreadScriptMsg),
-    FromDevtools(DevtoolScriptControlMsg),
-    FromImageCache((PipelineId, PendingImageResponse)),
-    FromWebGPUServer(WebGPUMsg),
+    Constellation(ConstellationControlMsg),
+    Script(MainThreadScriptMsg),
+    Devtools(DevtoolScriptControlMsg),
+    ImageCache((PipelineId, PendingImageResponse)),
+    WebGPUServer(WebGPUMsg),
 }
 
 /// Messages used to control the script event loop.
@@ -1470,7 +1470,7 @@ impl ScriptThread {
     /// Handle incoming control messages.
     fn handle_msgs(&self) -> bool {
         use self::MixedMessage::{
-            FromConstellation, FromDevtools, FromImageCache, FromScript, FromWebGPUServer,
+            Constellation, Devtools, ImageCache, Script, WebGPUServer,
         };
 
         // Handle pending resize events.
@@ -1503,14 +1503,14 @@ impl ScriptThread {
                     .task_queue
                     .recv()
                     .expect("Spurious wake-up of the event-loop, task-queue has no tasks available");
-                FromScript(event)
+                Script(event)
             },
-            recv(self.control_port) -> msg => FromConstellation(msg.unwrap()),
+            recv(self.control_port) -> msg => Constellation(msg.unwrap()),
             recv(self.devtools_chan.as_ref().map(|_| &self.devtools_port).unwrap_or(&crossbeam_channel::never())) -> msg
-                => FromDevtools(msg.unwrap()),
-            recv(self.image_cache_port) -> msg => FromImageCache(msg.unwrap()),
+                => Devtools(msg.unwrap()),
+            recv(self.image_cache_port) -> msg => ImageCache(msg.unwrap()),
             recv(self.webgpu_port.borrow().as_ref().unwrap_or(&crossbeam_channel::never())) -> msg
-                => FromWebGPUServer(msg.unwrap()),
+                => WebGPUServer(msg.unwrap()),
         };
         debug!("Got event.");
 
@@ -1529,7 +1529,7 @@ impl ScriptThread {
                 // This has to be handled before the ResizeMsg below,
                 // otherwise the page may not have been added to the
                 // child list yet, causing the find() to fail.
-                FromConstellation(ConstellationControlMsg::AttachLayout(new_layout_info)) => {
+                Constellation(ConstellationControlMsg::AttachLayout(new_layout_info)) => {
                     let pipeline_id = new_layout_info.new_pipeline_id;
                     self.profile_event(
                         ScriptThreadEventCategory::AttachLayout,
@@ -1565,28 +1565,28 @@ impl ScriptThread {
                         },
                     )
                 },
-                FromConstellation(ConstellationControlMsg::Resize(id, size, size_type)) => {
+                Constellation(ConstellationControlMsg::Resize(id, size, size_type)) => {
                     // step 7.7
                     self.profile_event(ScriptThreadEventCategory::Resize, Some(id), || {
                         self.handle_resize(id, size, size_type);
                     })
                 },
-                FromConstellation(ConstellationControlMsg::Viewport(id, rect)) => self
+                Constellation(ConstellationControlMsg::Viewport(id, rect)) => self
                     .profile_event(ScriptThreadEventCategory::SetViewport, Some(id), || {
                         self.handle_viewport(id, rect);
                     }),
-                FromConstellation(ConstellationControlMsg::SetScrollState(id, scroll_state)) => {
+                Constellation(ConstellationControlMsg::SetScrollState(id, scroll_state)) => {
                     self.profile_event(ScriptThreadEventCategory::SetScrollState, Some(id), || {
                         self.handle_set_scroll_state(id, &scroll_state);
                     })
                 },
-                FromConstellation(ConstellationControlMsg::TickAllAnimations(pipeline_id, _)) => {
+                Constellation(ConstellationControlMsg::TickAllAnimations(pipeline_id, _)) => {
                     if !animation_ticks.contains(&pipeline_id) {
                         animation_ticks.insert(pipeline_id);
                         sequential.push(event);
                     }
                 },
-                FromConstellation(ConstellationControlMsg::SendEvent(_, MouseMoveEvent(..))) => {
+                Constellation(ConstellationControlMsg::SendEvent(_, MouseMoveEvent(..))) => {
                     match mouse_move_event_index {
                         None => {
                             mouse_move_event_index = Some(sequential.len());
@@ -1595,11 +1595,11 @@ impl ScriptThread {
                         Some(index) => sequential[index] = event,
                     }
                 },
-                FromScript(MainThreadScriptMsg::Inactive) => {
+                Script(MainThreadScriptMsg::Inactive) => {
                     // An event came-in from a document that is not fully-active, it has been stored by the task-queue.
                     // Continue without adding it to "sequential".
                 },
-                FromConstellation(ConstellationControlMsg::ExitFullScreen(id)) => self
+                Constellation(ConstellationControlMsg::ExitFullScreen(id)) => self
                     .profile_event(ScriptThreadEventCategory::ExitFullscreen, Some(id), || {
                         self.handle_exit_fullscreen(id);
                     }),
@@ -1618,17 +1618,17 @@ impl ScriptThread {
                             Err(_) => match &*self.webgpu_port.borrow() {
                                 Some(p) => match p.try_recv() {
                                     Err(_) => break,
-                                    Ok(ev) => event = FromWebGPUServer(ev),
+                                    Ok(ev) => event = WebGPUServer(ev),
                                 },
                                 None => break,
                             },
-                            Ok(ev) => event = FromImageCache(ev),
+                            Ok(ev) => event = ImageCache(ev),
                         },
-                        Ok(ev) => event = FromDevtools(ev),
+                        Ok(ev) => event = Devtools(ev),
                     },
-                    Ok(ev) => event = FromScript(ev),
+                    Ok(ev) => event = Script(ev),
                 },
-                Ok(ev) => event = FromConstellation(ev),
+                Ok(ev) => event = Constellation(ev),
             }
         }
 
@@ -1651,11 +1651,11 @@ impl ScriptThread {
             if self.closing.load(Ordering::SeqCst) {
                 // If we've received the closed signal from the BHM, only handle exit messages.
                 match msg {
-                    FromConstellation(ConstellationControlMsg::ExitScriptThread) => {
+                    Constellation(ConstellationControlMsg::ExitScriptThread) => {
                         self.handle_exit_script_thread_msg();
                         return false;
                     },
-                    FromConstellation(ConstellationControlMsg::ExitPipeline(
+                    Constellation(ConstellationControlMsg::ExitPipeline(
                         pipeline_id,
                         discard_browsing_context,
                     )) => {
@@ -1668,15 +1668,15 @@ impl ScriptThread {
 
             let result = self.profile_event(category, pipeline_id, move || {
                 match msg {
-                    FromConstellation(ConstellationControlMsg::ExitScriptThread) => {
+                    Constellation(ConstellationControlMsg::ExitScriptThread) => {
                         self.handle_exit_script_thread_msg();
                         return Some(false);
                     },
-                    FromConstellation(inner_msg) => self.handle_msg_from_constellation(inner_msg),
-                    FromScript(inner_msg) => self.handle_msg_from_script(inner_msg),
-                    FromDevtools(inner_msg) => self.handle_msg_from_devtools(inner_msg),
-                    FromImageCache(inner_msg) => self.handle_msg_from_image_cache(inner_msg),
-                    FromWebGPUServer(inner_msg) => self.handle_msg_from_webgpu_server(inner_msg),
+                    Constellation(inner_msg) => self.handle_msg_from_constellation(inner_msg),
+                    Script(inner_msg) => self.handle_msg_from_script(inner_msg),
+                    Devtools(inner_msg) => self.handle_msg_from_devtools(inner_msg),
+                    ImageCache(inner_msg) => self.handle_msg_from_image_cache(inner_msg),
+                    WebGPUServer(inner_msg) => self.handle_msg_from_webgpu_server(inner_msg),
                 }
 
                 None
@@ -1750,21 +1750,21 @@ impl ScriptThread {
 
     fn categorize_msg(&self, msg: &MixedMessage) -> ScriptThreadEventCategory {
         match *msg {
-            MixedMessage::FromConstellation(ref inner_msg) => match *inner_msg {
+            MixedMessage::Constellation(ref inner_msg) => match *inner_msg {
                 ConstellationControlMsg::SendEvent(_, _) => ScriptThreadEventCategory::DomEvent,
                 _ => ScriptThreadEventCategory::ConstellationMsg,
             },
             // TODO https://github.com/servo/servo/issues/18998
-            MixedMessage::FromDevtools(_) => ScriptThreadEventCategory::DevtoolsMsg,
-            MixedMessage::FromImageCache(_) => ScriptThreadEventCategory::ImageCacheMsg,
-            MixedMessage::FromScript(ref inner_msg) => match *inner_msg {
+            MixedMessage::Devtools(_) => ScriptThreadEventCategory::DevtoolsMsg,
+            MixedMessage::ImageCache(_) => ScriptThreadEventCategory::ImageCacheMsg,
+            MixedMessage::Script(ref inner_msg) => match *inner_msg {
                 MainThreadScriptMsg::Common(CommonScriptMsg::Task(category, ..)) => category,
                 MainThreadScriptMsg::RegisterPaintWorklet { .. } => {
                     ScriptThreadEventCategory::WorkletEvent
                 },
                 _ => ScriptThreadEventCategory::ScriptEvent,
             },
-            MixedMessage::FromWebGPUServer(_) => ScriptThreadEventCategory::WebGPUMsg,
+            MixedMessage::WebGPUServer(_) => ScriptThreadEventCategory::WebGPUMsg,
         }
     }
 
@@ -1813,7 +1813,7 @@ impl ScriptThread {
     fn message_to_pipeline(&self, msg: &MixedMessage) -> Option<PipelineId> {
         use script_traits::ConstellationControlMsg::*;
         match *msg {
-            MixedMessage::FromConstellation(ref inner_msg) => match *inner_msg {
+            MixedMessage::Constellation(ref inner_msg) => match *inner_msg {
                 StopDelayingLoadEventsMode(id) => Some(id),
                 NavigationResponse(id, _) => Some(id),
                 AttachLayout(ref new_layout_info) => new_layout_info
@@ -1855,8 +1855,8 @@ impl ScriptThread {
                 ForLayoutFromConstellation(_, id) => Some(id),
                 ForLayoutFromFontCache(id) => Some(id),
             },
-            MixedMessage::FromDevtools(_) => None,
-            MixedMessage::FromScript(ref inner_msg) => match *inner_msg {
+            MixedMessage::Devtools(_) => None,
+            MixedMessage::Script(ref inner_msg) => match *inner_msg {
                 MainThreadScriptMsg::Common(CommonScriptMsg::Task(_, _, pipeline_id, _)) => {
                     pipeline_id
                 },
@@ -1866,8 +1866,8 @@ impl ScriptThread {
                 MainThreadScriptMsg::Inactive => None,
                 MainThreadScriptMsg::WakeUp => None,
             },
-            MixedMessage::FromImageCache((pipeline_id, _)) => Some(pipeline_id),
-            MixedMessage::FromWebGPUServer(..) => None,
+            MixedMessage::ImageCache((pipeline_id, _)) => Some(pipeline_id),
+            MixedMessage::WebGPUServer(..) => None,
         }
     }
 
